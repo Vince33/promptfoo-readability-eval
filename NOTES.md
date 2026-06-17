@@ -78,3 +78,46 @@ expected. Possible next steps: add `repeat` to test output consistency
 across multiple runs, test with non-English text to see if the agreement 
 pattern holds, or test with the spaCy comparison once that exists in 
 language-tools-api.
+
+## Update — spaCy structural analysis added as a third data point
+
+language-tools-api gained a `/linguistic-analysis` endpoint using spaCy, 
+returning average dependency tree depth, lexical diversity (type-token 
+ratio), and noun-to-verb ratio. Running the same three test texts through 
+it adds a third lens alongside Flesch-Kincaid and the LLM assessments:
+
+| Text | Flesch label | LLM assessment | Dependency depth | Lexical diversity | Noun:Verb |
+|---|---|---|---|---|---|
+| "The cat sat on the mat." | Very Easy | Very Easy (both) | 4.0 | 0.83 | 2.0 |
+| Scientists/exercise text | Difficult | Easy / Very Easy (both) | 4.33 | 0.96 | 1.5 |
+| Epistemological text | Very Difficult | Very Difficult (both) | 5.0 | 0.92 | 4.0 |
+
+### Finding — dependency depth is a weak discriminator here; vocabulary signals matter more
+
+Dependency tree depth barely changes across all three texts (4.0 to 5.0) 
+despite Flesch-Kincaid scoring them at opposite extremes. This sentence 
+set happens to use mostly flat, prepositionally-modified structures rather 
+than deeply nested clauses, so depth alone does not capture the difficulty 
+gap.
+
+Lexical diversity and noun-to-verb ratio align more closely with what the 
+LLMs seem to be picking up on. The scientists/exercise text has the 
+highest lexical diversity of the three (0.96) and a noun:verb ratio (1.5) 
+closer to the simple sentence (2.0) than to the noun-dense epistemological 
+text (4.0). This is consistent with the LLMs rating it "Easy" — varied but 
+common vocabulary, balanced verb usage, narrative sentence rhythm — even 
+though Flesch-Kincaid scores it "Difficult" based on syllable and word 
+count alone.
+
+### Implication
+
+Flesch-Kincaid, spaCy structural metrics, and LLM judgment are measuring 
+overlapping but distinct things. Syllable-based formulas conflate 
+vocabulary difficulty and sentence length into one number. Dependency 
+depth isolates structural nesting specifically, which may not move much 
+even when other complexity dimensions do. LLM assessment appears to weight 
+vocabulary familiarity and rhythm more heavily, closer to subjective human 
+reading experience but with no formal calibration behind it.
+
+No single metric here is the "correct" one. This three-way comparison is 
+the more honest finding than any single score.
