@@ -1,41 +1,47 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
-
-description: "My eval"
+description: "Readability comparison — LLM assessment vs Flesch-Kincaid formula"
 
 prompts:
-  - "Write a tweet about {{topic}}"
-  
+  - |
+    Assess the readability of the following text. 
+    Return a JSON object with these fields:
+    - reading_level: a US grade level number (e.g. 5, 8, 12)
+    - difficulty: one of "Very Easy", "Easy", "Standard", "Fairly Difficult", "Difficult", "Very Difficult"
+    - reasoning: one sentence explaining your assessment
+    
+    Text: {{text}}
+    
+    Return only raw JSON. No markdown, no code fences, no other text.
 
 providers:
-  - "anthropic:messages:claude-opus-4-8"
+  - "anthropic:messages:claude-haiku-4-5"
   - "anthropic:messages:claude-sonnet-4-6"
-  - "anthropic:messages:claude-opus-4-1-20250805"
-  - "anthropic:messages:claude-3-7-sonnet-20250219"
-  
 
 tests:
   - vars:
-      topic: bananas
-
-  - vars:
-      topic: avocado toast
+      text: "The cat sat on the mat."
+      expected_difficulty: "Very Easy"
+      flesch_score: "116.15"
     assert:
-      # For more information on assertions, see https://promptfoo.dev/docs/configuration/expected-outputs
-
-      # Make sure output contains the word "avocado"
-      - type: icontains
-        value: avocado
-
-      # Prefer shorter outputs
       - type: javascript
-        value: 1 / (output.length + 1)
+        value: "const c = output.replace(/```json|```/g, '').trim(); return JSON.parse(c).difficulty === 'Very Easy';"
+        metric: difficulty_agreement
 
   - vars:
-      topic: new york city
+      text: "Scientists found that regular exercise helps improve memory. The study followed two hundred adults over six months. Those who exercised showed better results on memory tests."
+      expected_difficulty: "Difficult"
+      flesch_score: "48.36"
     assert:
-      # For more information on model-graded evals, see https://promptfoo.dev/docs/configuration/expected-outputs/model-graded
-      - type: llm-rubric
-        value: ensure that the output is funny
+      - type: javascript
+        value: "const c = output.replace(/```json|```/g, '').trim(); return JSON.parse(c).difficulty === 'Difficult';"
+        metric: difficulty_agreement
 
+  - vars:
+      text: "The epistemological implications of poststrucuralist discourse necessitate a fundamental reassessment of hermeneutical frameworks."
+      expected_difficulty: "Very Difficult"
+      flesch_score: "-53.65"
+    assert:
+      - type: javascript
+        value: "const c = output.replace(/```json|```/g, '').trim(); return JSON.parse(c).difficulty === 'Very Difficult';"
+        metric: difficulty_agreement
