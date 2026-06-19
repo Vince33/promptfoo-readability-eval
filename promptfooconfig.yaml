@@ -2,6 +2,8 @@
 
 description: "Readability comparison — LLM assessment vs Flesch-Kincaid formula"
 
+repeat: 5
+
 prompts:
   - |
     Assess the readability of the following text. 
