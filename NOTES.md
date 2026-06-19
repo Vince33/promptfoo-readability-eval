@@ -121,3 +121,53 @@ reading experience but with no formal calibration behind it.
 
 No single metric here is the "correct" one. This three-way comparison is 
 the more honest finding than any single score.
+
+## Update — output consistency across repeated runs
+
+Tested whether each model's readability classification is stable across 
+repeated runs of the same input, using promptfoo's `--repeat` flag (note: 
+this is a CLI flag in this promptfoo version, not a config-file key — 
+`repeat:` in promptfooconfig.yaml is silently ignored).
+
+```bash
+promptfoo eval --no-cache --repeat 3
+```
+
+### Finding — zero variance across all three texts, both models
+
+Despite running at Anthropic's default temperature (1.0, not explicitly 
+set to 0 anywhere in this config), both Claude Haiku and Claude Sonnet 
+returned identical `difficulty` and `reading_level` values across all 3 
+repeats, for all 3 test texts:
+
+- "The cat sat on the mat." — both models: Very Easy, grade 1, every run
+- Scientists/exercise text — Haiku: Very Easy every run, Sonnet: Easy 
+  every run (both still disagreeing with the Flesch-Kincaid "Difficult" 
+  label, but consistently so)
+- Epistemological text — Haiku: Very Difficult/grade 16, Sonnet: Very 
+  Difficult/grade 18, every run
+
+Reasoning text varied slightly in wording between repeats, but the 
+structured judgment fields (difficulty label, grade level) did not move 
+at all.
+
+### Implication
+
+For this specific classification task — picking one label from a fixed 
+set of six — model output appears highly stable even without explicitly 
+setting temperature to 0. This suggests the readability judgment for 
+these three texts isn't sitting near a decision boundary for either 
+model, including the "Scientists" text that sits in contested territory 
+between the models and the formula. The models aren't uncertain or 
+wavering on that text — they're consistently confident in a label that 
+consistently disagrees with Flesch-Kincaid.
+
+### Limitation
+
+Three repeats on three texts is a small sample. It demonstrates stability 
+on these specific inputs, not a general claim that LLM readability 
+classification is always deterministic. This result does not tell us 
+whether the Scientists text is far from a decision boundary or sitting 
+right at one that the model happens to land on consistently — distinguishing 
+those would require more repeats, or testing with deliberately perturbed 
+variants of the same text.
