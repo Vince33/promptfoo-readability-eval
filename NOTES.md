@@ -171,3 +171,101 @@ whether the Scientists text is far from a decision boundary or sitting
 right at one that the model happens to land on consistently — distinguishing 
 those would require more repeats, or testing with deliberately perturbed 
 variants of the same text.
+
+## Finding — promptfoo's llm-rubric vs DeepEval's FaithfulnessMetric on a known fabrication case
+
+### Background
+
+language-ai-qa's test_first_eval.py documents a finding (see that repo's NOTES.md, 
+Day 2-3) that DeepEval's HallucinationMetric is contradiction-based and misses 
+unsupported additions — a fabricated-but-plausible claim that doesn't contradict 
+the source context passes HallucinationMetric, but is correctly caught by 
+FaithfulnessMetric when configured with `penalize_ambiguous_claims=True`.
+
+The specific test case: given context describing a Taíno yukayeke (village), an 
+output claiming villages "were always built near sacred rivers used for ritual 
+bathing" — a fabrication not present in or contradicted by the source — passes 
+HallucinationMetric and fails FaithfulnessMetric (correctly configured).
+
+This investigation asks: does promptfoo's `llm-rubric` assertion, given the exact 
+same context and exact same fabricated output, reach the same verdict as 
+FaithfulnessMetric?
+
+### Method
+
+Used promptfoo's `echo` provider to pass the known fabricated output through 
+unchanged (no model generation involved), graded by a single `llm-rubric` 
+assertion using Claude Haiku 4.5 as judge — the same model DeepEval used. The 
+rubric instruction was written to mirror FaithfulnessMetric's strict 
+configuration explicitly: "Any claim not grounded in the context — even if 
+plausible — should cause this to fail."
+
+Using the exact same context and output as a control, rather than letting 
+promptfoo generate a fresh response, isolates the comparison to the grading 
+mechanism itself rather than introducing a second variable (a new model call 
+that might not reproduce the same fabrication).
+
+### Two real bugs found before getting a trustworthy result
+
+**Bug 1 — unsubstituted template variable.** The first config referenced the 
+context via a `{{context}}` variable inside the `llm-rubric` value string. The 
+result showed `[PASS]`, but inspecting the rendered prompt in `promptfoo view` 
+showed the literal text `{{context}}` had never been interpolated — the judge 
+model was asked to grade against placeholder syntax, not real content. Fixed 
+by inlining the context directly as literal text in the YAML rather than 
+templating it.
+
+**Bug 2 — misplaced `assert` key.** After fixing the template issue, the result 
+was still `[PASS]`, but with 0 tokens used for grading — meaning no actual 
+judge call happened. The CLI had been printing a warning on every run 
+("Found 'assert' key in vars... should be unindented so it is under the test 
+itself, not vars") that was dismissed as noise. Inspecting the exported JSON 
+confirmed it: `assert` was nested inside `vars:` rather than being a sibling 
+key at the test level, so promptfoo found zero real assertions to run, and 
+`gradingResult.reason` read "No assertions" — a default pass with no 
+evaluation behind it. Fixed by correcting the YAML indentation so `assert:` 
+sits at the same level as `vars:`.
+
+Both bugs produced a misleading `PASS` for unrelated infrastructure reasons, 
+before any real grading occurred. Neither was caught by reading the summary 
+table alone — both required inspecting either `promptfoo view`'s expanded 
+detail or the raw exported JSON to find the actual judge response (or lack 
+of one).
+
+### Result
+
+With both bugs fixed (confirmed by: the CLI warning gone, real token usage 
+logged — 510 total, 336 prompt / 174 completion — meaning a genuine judge 
+call occurred), the result is `[FAIL]`.
+
+promptfoo's `llm-rubric`, given the real context and real fabricated output, 
+correctly identifies "sacred rivers used for ritual bathing" as unsupported 
+by the source — matching FaithfulnessMetric's verdict, not 
+HallucinationMetric's.
+
+### Interpretation
+
+This isn't evidence that promptfoo is "better" than DeepEval or vice versa. 
+Both tools use the same underlying mechanism — an LLM judge following 
+instructions — and both can be configured to catch or miss unsupported 
+additions depending on how explicitly the instruction is written. 
+FaithfulnessMetric needs `penalize_ambiguous_claims=True` to catch this case; 
+the default configuration produces HallucinationMetric's blind spot (see 
+language-ai-qa NOTES.md). Likewise, a vaguely-worded `llm-rubric` instruction 
+(e.g. "is this output accurate?") would likely be more lenient than one that 
+explicitly states ungrounded-but-plausible claims should fail.
+
+The real variable is the strictness and explicitness of the grading 
+instruction, not the tool. Both promptfoo and DeepEval are flexible enough 
+to produce either a strict or lenient verdict on the same input — the burden 
+is on whoever configures the eval to be explicit about what "faithful" means 
+for their domain.
+
+### Process note
+
+Two CLI warnings/results were dismissed too quickly in this investigation — 
+the repeated "Found 'assert' key in vars" message specifically. Worth treating 
+CLI warnings with the same seriousness as failing tests going forward: a tool 
+telling you something is probably wrong, repeatedly, across multiple runs, is 
+worth investigating immediately rather than after a misleading result has 
+already been read as a finding.
