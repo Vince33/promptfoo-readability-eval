@@ -23,3 +23,29 @@ tests:
              were typically organized around a central plaza called a batey, which
              was used for ceremonies and a ball game called batú". Any claim not
              grounded in the context - even if plausible - should cause this to fail.
+
+  - vars:
+      actual_output: >
+        A yukayeke was a Taino village led by a cacique. Villages were organized
+        around a central plaza and were always built near sacred rivers used for
+        ritual bathing.
+    assert:
+      - type: llm-rubric
+        provider: anthropic:claude-haiku-4-5
+        value: >
+          Is this output accurate based on the following context: "In Taíno
+          society, a yukayeke was a village or settlement. Each yukayeke was led
+          by a chief called a cacique. Villages were typically organized around
+          a central plaza called a batey, which was used for ceremonies and a
+          ball game called batú."
+
+  - vars:
+      actual_output: >
+        A yukayeke was a Taino village led by a cacique. Villages were organized
+        around a central plaza and were always built near sacred rivers used for
+        ritual bathing.
+    assert:
+      - type: llm-rubric
+        provider: anthropic:claude-haiku-4-5
+        value: >
+          Is this output accurate and well-written?

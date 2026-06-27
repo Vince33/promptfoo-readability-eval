@@ -1,0 +1,77 @@
+description: "Same wording-strictness comparison as faithfulness-comparison-config.yaml, but using a fictional context to eliminate the real-world-knowledge confound"
+
+prompts:
+  - "{{actual_output}}"
+
+providers:
+  - id: echo
+
+tests:
+  - vars:
+      actual_output: >
+        The Velrithi Accord was a trade agreement between three merchant guilds
+        in Doreth that standardized grain weights and required disputes to be
+        settled by a panel of three arbiters chosen by lottery. Guild members
+        who violated the Accord were publicly branded as a mark of dishonor.
+    assert:
+      - type: llm-rubric
+        provider: anthropic:claude-haiku-4-5
+        value: >
+          The output should only contain claims that are directly supported by
+          the following context: "The Velrithi Accord was a trade agreement
+          established between three merchant guilds in the city of Doreth. It
+          set standardized weights for grain shipments and required all disputes
+          to be settled by a panel of three arbiters chosen by lottery. The
+          Accord was renewed every five years by unanimous vote of the
+          participating guilds." Any claim not grounded in the context — even
+          if plausible — should cause this to fail.
+
+  - vars:
+      actual_output: >
+        The Velrithi Accord was a trade agreement between three merchant guilds
+        in Doreth that standardized grain weights and required disputes to be
+        settled by a panel of three arbiters chosen by lottery. Guild members
+        who violated the Accord were publicly branded as a mark of dishonor.
+    assert:
+      - type: llm-rubric
+        provider: anthropic:claude-haiku-4-5
+        value: >
+          Is this output accurate based on the following context: "The Velrithi
+          Accord was a trade agreement established between three merchant
+          guilds in the city of Doreth. It set standardized weights for grain
+          shipments and required all disputes to be settled by a panel of three
+          arbiters chosen by lottery. The Accord was renewed every five years
+          by unanimous vote of the participating guilds."
+
+  - vars:
+      actual_output: >
+        The Velrithi Accord was a trade agreement between three merchant guilds
+        in Doreth that standardized grain weights and required disputes to be
+        settled by a panel of three arbiters chosen by lottery. Guild members
+        who violated the Accord were publicly branded as a mark of dishonor.
+    assert:
+      - type: llm-rubric
+        provider: anthropic:claude-haiku-4-5
+        value: >
+          Is this output accurate and well-written?
+
+  - vars:
+      actual_output: >
+        The Velrithi Accord was a trade agreement between three merchant guilds
+        in Doreth that standardized grain weights and required disputes to be
+        settled by a panel of three arbiters chosen by lottery. Guild members
+        who violated the Accord were publicly branded as a mark of dishonor.
+    assert:
+      - type: llm-rubric
+        provider: anthropic:claude-haiku-4-5
+        value: >
+          Treat the following context as the complete and only source of truth.
+          Do not use any outside knowledge or judge whether the scenario is
+          real or plausible — evaluate only whether the output's claims are
+          present in this context: "The Velrithi Accord was a trade agreement
+          established between three merchant guilds in the city of Doreth. It
+          set standardized weights for grain shipments and required all disputes
+          to be settled by a panel of three arbiters chosen by lottery. The
+          Accord was renewed every five years by unanimous vote of the
+          participating guilds." Does the output contain any claim not present
+          in this context?

@@ -269,3 +269,150 @@ CLI warnings with the same seriousness as failing tests going forward: a tool
 telling you something is probably wrong, repeatedly, across multiple runs, is 
 worth investigating immediately rather than after a misleading result has 
 already been read as a finding.
+
+## Finding — testing whether rubric wording controls leniency toward unsupported additions
+
+### Background
+
+language-ai-qa's test_first_eval.py documents a finding (see that repo's NOTES.md,
+Day 2-3) that DeepEval's HallucinationMetric is contradiction-based and misses
+unsupported additions — a fabricated-but-plausible claim that doesn't contradict
+the source context passes HallucinationMetric, but is correctly caught by
+FaithfulnessMetric when configured with `penalize_ambiguous_claims=True`.
+
+The specific test case: given context describing a Taíno yukayeke (village), an
+output claiming villages "were always built near sacred rivers used for ritual
+bathing" — a fabrication not present in or contradicted by the source — passes
+HallucinationMetric and fails FaithfulnessMetric (correctly configured).
+
+This investigation started with a narrower question: does promptfoo's
+`llm-rubric`, given the exact same context and output, reach the same verdict
+as FaithfulnessMetric? It grew into a longer investigation of whether rubric
+*wording* (strict vs. vague vs. absent) controls how leniently the judge treats
+unsupported additions.
+
+### Method
+
+Used promptfoo's `echo` provider to pass known outputs through unchanged (no
+model generation involved), graded by `llm-rubric` assertions using Claude
+Haiku 4.5 as judge — the same model DeepEval used. Using fixed inputs as a
+control, rather than letting promptfoo generate fresh responses, isolates the
+comparison to the grading mechanism itself.
+
+Two early configuration mistakes — an unsubstituted `{{context}}` template
+variable, and an `assert` key misplaced inside `vars` instead of as a sibling
+key — each produced a misleading `[PASS]` with no real grading behind it
+before being caught and fixed; see git history for specifics. Both were only
+caught by inspecting `promptfoo view`'s detail rather than trusting the
+summary table, and one was flagged by a repeated CLI warning that had
+initially been dismissed as noise.
+
+### First real result: a strict rubric replicates FaithfulnessMetric's verdict
+
+With both bugs fixed, a rubric explicitly instructed to fail any claim "not
+grounded in the context — even if plausible" produced `[FAIL]` on the Taíno
+fabrication — matching FaithfulnessMetric's verdict, not HallucinationMetric's.
+
+### Testing whether wording strictness is what's actually doing the work
+
+A prediction that a vaguer rubric ("Is this output accurate based on the
+context?") would be more lenient and might let the fabrication pass was
+tested across three conditions on the same Taíno input: strict-with-context,
+vague-with-context, and no-context-at-all ("Is this output accurate and
+well-written?").
+
+All three failed. The reasoning behind each verdict differed:
+
+- **Strict-with-context:** pure context-comparison — "the context makes no
+  mention of rivers or ritual bathing... the context states the batey was
+  used for ceremonies and a ball game called batú, not bathing."
+- **Vague-with-context:** also context-anchored, though softer (a partial
+  0.60 score) — "the output is partially accurate but includes unsupported
+  claims."
+- **No-context:** the judge fell back on Taíno history it already knew —
+  "the assertion that villages were always built near sacred rivers for this
+  specific purpose is not well-supported by historical evidence."
+
+When context was available, the judge compared claims against it directly.
+When it wasn't, the judge reasoned from its own training knowledge of Taíno
+history instead. Both paths landed on the same verdict here, but Taíno
+history is something the judge already knows — so the no-context condition
+wasn't testing "does the rubric work with no grounding," it was testing "does
+the judge know this topic." Different question, different answer.
+
+### A fictional control, and a second confound
+
+To remove the real-world-knowledge fallback, the same three-condition test was
+rebuilt around a fictional scenario (an invented "Velrithi Accord" between
+fictional merchant guilds) with no real-world referent at all.
+
+All three conditions failed again, and the strict and vague conditions
+reasoned the same way as before — direct comparison against the provided
+context. But the no-context condition's reasoning revealed a second,
+different fallback: rather than reasoning about real-world plausibility
+(there was no real subject to be plausible about), the judge recognized the
+entire scenario as fictional — "'Velrithi Accord,' 'Doreth'... do not
+correspond to any known historical trade agreement or location... presents
+invented information as fact without any indication that it is fictional" —
+and failed the output for presenting fiction as fact. That's a different
+failure mode than catching the specific unsupported detail, and not the
+mechanism this experiment was meant to test.
+
+Removing context didn't create a clean "no grounding mechanism" condition.
+It surfaced a different fallback (real-vs-fictional pattern matching) that
+the experiment hadn't accounted for.
+
+### A fourth, explicitly-controlled condition
+
+A final rubric was added, explicitly instructing the judge to suspend outside
+judgment: "Treat the following context as the complete and only source of
+truth. Do not use any outside knowledge or judge whether the scenario is real
+or plausible — evaluate only whether the output's claims are present in this
+context."
+
+This also failed — but the reasoning confirmed the instruction was followed:
+"The output contains the claim that 'Guild members who violated the Accord
+were publicly branded as a mark of dishonor.' This claim is not present in
+the provided context... All other claims... are present in the context." No
+mention of "fictional," "historical," or "plausible" — pure claim-by-claim
+comparison against the context, the same reasoning style seen in the strict
+and vague conditions when context was present, now reproduced even with
+context withheld, once pulled back in by direct instruction.
+
+### Interpretation
+
+Across four conditions and two fabrication scenarios (one real-world, one
+fictional), Claude Haiku 4.5 as an `llm-rubric` judge consistently caught a
+single inserted, unsupported-but-plausible claim, regardless of how strict,
+vague, or absent the grounding instruction was. But "consistently caught it"
+hides two different reasoning processes underneath: whenever context was
+present in the rubric, the judge compared claims to it directly, no matter
+how the instruction was worded. Whenever context was absent, it fell back on
+whatever independent knowledge it had — real-world history for the Taíno
+case, real-vs-fictional pattern recognition for the invented case — until
+told explicitly not to, at which point it reproduced the same pure-comparison
+reasoning from a standing start.
+
+This doesn't confirm the original prediction that wording controls leniency.
+It suggests the judge has at least two distinct, independently reliable
+reasoning pathways for this kind of fabrication, and that explicit
+instruction reliably steers which pathway it uses — visible directly in its
+stated reasoning — even when both pathways land on the same verdict.
+
+For this specific fabrication type — a short, concrete, plausible-sounding
+factual addition — rubric wording mattered less than expected for the final
+verdict, because the judge's default behavior was already robust. The
+wording mattered for *how* the judge reasoned, which would likely matter more
+for subtler fabrications or borderline claims where the different pathways
+might disagree instead of converge.
+
+### Process note
+
+This is specification-based testing applied to a rubric rather than code: the
+three wording conditions were treated as equivalence partitions, each
+expected to produce a different result. They didn't — all three collapsed to
+the same final verdict for this input. But the reasoning text behind each
+verdict showed they weren't identical underneath; they were different
+mechanisms converging on the same answer. Same output, different process —
+and that distinction was only visible by checking the reasoning, not just the
+pass/fail result.
